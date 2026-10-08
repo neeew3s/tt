@@ -404,7 +404,7 @@
     async function loadState() {
       try {
         const data = await fetchRemoteState();
-        if (data && Array.isArray(data.workspaces) && data.workspaces.length) {
+        if (data && Array.isArray(data.workspaces)) {
           appState.workspaces = data.workspaces;
           appState.currentWsId = data.currentWsId || appState.workspaces[0]?.id;
           remoteAvailable = true;
@@ -421,7 +421,7 @@
         const saved = localStorage.getItem(LOCAL_KEY);
         if (saved) {
           const parsed = JSON.parse(saved);
-          if (parsed.workspaces && parsed.workspaces.length) {
+          if (Array.isArray(parsed.workspaces)) {
             appState.workspaces = parsed.workspaces;
             appState.currentWsId = parsed.currentWsId || appState.workspaces[0]?.id;
             usedLocal = true;
@@ -436,9 +436,9 @@
         appState.currentWsId = INITIAL_STATE.activeWorkspaceId;
       }
 
-      // Сервер пуст, но у нас есть локальные/демо данные — зальём их в облако,
-      // чтобы другие устройства подхватили их сразу.
-      if (remoteAvailable && appState.workspaces.length) {
+      // Сервер пуст, а у нас есть локальное/демо состояние — зальём его в облако,
+      // чтобы другие устройства подхватили его сразу.
+      if (remoteAvailable) {
         localSave();
         scheduleRemoteSync();
       }
