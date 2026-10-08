@@ -1,4 +1,4 @@
-import { kv } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
 
 const KEY = 'tt_state_v1';
 
@@ -7,6 +7,13 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, PUT, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
+
+function getRedis() {
+  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+  if (!url || !token) return null;
+  return new Redis({ url, token });
+}
 
 export default {
   async fetch(request) {
@@ -18,18 +25,27 @@ export default {
     const method = request.method.toUpperCase();
 
     if (method === 'GET') {
+      const redis = getRedis();
+      if (!redis) {
+        return Response.json({ error: 'Хранилище не настроено' }, { status: 503, headers: corsHeaders });
+      }
       try {
-        const data = await kv.get(KEY);
-        return Response.json(data ?? null, { headers: corsHeaders });
+        const raw = await redis.get(KEY);
+        const data = raw ? JSON.parse(raw) : null;
+        return Response.json(data, { headers: corsHeaders });
       } catch (err) {
         return Response.json({ error: 'Хранилище недоступно' }, { status: 503, headers: corsHeaders });
       }
     }
 
     if (method === 'PUT') {
+      const redis = getRedis();
+      if (!redis) {
+        return Response.json({ error: 'Хранилище не настроено' }, { status: 503, headers: corsHeaders });
+      }
       try {
         const body = await request.json();
-        await kv.set(KEY, body);
+        await redis.set(KEY, JSON.stringify(body));
         return Response.json({ ok: true }, { headers: corsHeaders });
       } catch (err) {
         return Response.json({ error: 'Не удалось сохранить' }, { status: 500, headers: corsHeaders });
