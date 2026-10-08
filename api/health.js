@@ -2,7 +2,22 @@ import { Redis } from '@upstash/redis';
 
 const KEY = 'tt_state_v1';
 
-// Разбирает одиночный URL в { url, token } для Upstash REST API.
+function describeUrl(raw) {
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    return {
+      protocol: u.protocol,
+      hostname: u.hostname,
+      hasUsername: !!u.username,
+      username: u.username || null,
+      hasPassword: !!u.password,
+    };
+  } catch (e) {
+    return { error: 'invalid URL', rawPrefix: String(raw).slice(0, 12) };
+  }
+}
+
 function parseUpstashUrl(raw) {
   try {
     const u = new URL(raw);
@@ -17,9 +32,7 @@ function parseUpstashUrl(raw) {
       const token = u.password || '';
       return token ? { url, token } : { url };
     }
-  } catch (e) {
-    // ignore
-  }
+  } catch (e) {}
   return {};
 }
 
@@ -33,12 +46,12 @@ function getRedis() {
     const { url, token } = parseUpstashUrl(raw);
     if (url && token) return new Redis({ url, token });
   }
-
   return null;
 }
 
 export default {
   async fetch() {
+    const redisUrl = process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL || null;
     const result = {
       env: {
         UPSTASH_REDIS_REST_URL: !!process.env.UPSTASH_REDIS_REST_URL,
@@ -48,6 +61,7 @@ export default {
         KV_REST_API_URL: !!process.env.KV_REST_API_URL,
         KV_REST_API_TOKEN: !!process.env.KV_REST_API_TOKEN,
       },
+      redisUrl: describeUrl(redisUrl),
       redisConfigured: false,
       writeReadTest: null,
       storedState: null,
@@ -59,7 +73,6 @@ export default {
     }
     result.redisConfigured = true;
 
-    // Живой тест: запись → чтение → удаление пробного ключа
     try {
       await redis.set('tt_health_probe', 'ok');
       const val = await redis.get('tt_health_probe');
@@ -69,7 +82,6 @@ export default {
       result.writeReadTest = 'error: ' + (e && e.message ? e.message : String(e));
     }
 
-    // Есть ли уже сохранённое состояние
     try {
       const raw = await redis.get(KEY);
       if (raw) {
