@@ -1,4 +1,5 @@
-import { Redis } from '@upstash/redis';
+import { Redis as UpstashRedis } from '@upstash/redis';
+import IORedis from 'ioredis';
 
 const KEY = 'tt_state_v1';
 
@@ -8,42 +9,37 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
-// Разбирает одиночный URL в { url, token } для Upstash REST API.
-// Поддерживает rediss://default:PASSWORD@HOST:6379 и https://[TOKEN@]HOST.
-function parseUpstashUrl(raw) {
-  try {
-    const u = new URL(raw);
-    const proto = u.protocol;
-    if (proto === 'http:' || proto === 'https:') {
-      const url = u.origin; // без userinfo и пути
-      const token = u.password || u.username || '';
-      return token ? { url, token } : { url };
-    }
-    if (proto === 'redis:' || proto === 'rediss:') {
-      const url = 'https://' + u.hostname;
-      const token = u.password || '';
-      return token ? { url, token } : { url };
-    }
-  } catch (e) {
-    // невалидный URL — игнорируем
-  }
-  return {};
-}
-
-function getRedis() {
-  // 1) Стандартные имена Upstash REST (Vercel Marketplace)
+// Возвращает единый клиент: либо TCP (ioredis, для redis://rediss://),
+// либо REST (Upstash, для UPSTASH_REDIS_REST_URL + TOKEN).
+function getClient() {
+  // 1) Upstash REST (HTTP)
   const restUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
   const restToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
-  if (restUrl && restToken) return new Redis({ url: restUrl, token: restToken });
+  if (restUrl && restToken) {
+    return { client: new UpstashRedis({ url: restUrl, token: restToken }), kind: 'rest' };
+  }
 
-  // 2) Одиночный URL (REDIS_URL / UPSTASH_REDIS_URL): rediss:// или https://
-  const raw = process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL;
-  if (raw) {
-    const { url, token } = parseUpstashUrl(raw);
-    if (url && token) return new Redis({ url, token });
+  // 2) Обычный Redis по TCP (redis:// или rediss://) — Redis Cloud и т.п.
+  const tcpUrl = process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL;
+  if (tcpUrl) {
+    return {
+      client: new IORedis(tcpUrl, {
+        lazyConnect: true,
+        maxRetriesPerRequest: 1,
+        connectTimeout: 8000,
+        retryStrategy: () => null,
+      }),
+      kind: 'tcp',
+    };
   }
 
   return null;
+}
+
+function closeClient(c) {
+  if (c && c.kind === 'tcp') {
+    try { c.client.disconnect(); } catch (e) { /* ignore */ }
+  }
 }
 
 export default {
@@ -56,30 +52,34 @@ export default {
     const method = request.method.toUpperCase();
 
     if (method === 'GET') {
-      const redis = getRedis();
-      if (!redis) {
+      const c = getClient();
+      if (!c) {
         return Response.json({ error: 'Хранилище не настроено' }, { status: 503, headers: corsHeaders });
       }
       try {
-        const raw = await redis.get(KEY);
+        const raw = await c.client.get(KEY);
         const data = raw ? JSON.parse(raw) : null;
         return Response.json(data, { headers: corsHeaders });
       } catch (err) {
         return Response.json({ error: 'Хранилище недоступно' }, { status: 503, headers: corsHeaders });
+      } finally {
+        closeClient(c);
       }
     }
 
     if (method === 'PUT') {
-      const redis = getRedis();
-      if (!redis) {
+      const c = getClient();
+      if (!c) {
         return Response.json({ error: 'Хранилище не настроено' }, { status: 503, headers: corsHeaders });
       }
       try {
         const body = await request.json();
-        await redis.set(KEY, JSON.stringify(body));
+        await c.client.set(KEY, JSON.stringify(body));
         return Response.json({ ok: true }, { headers: corsHeaders });
       } catch (err) {
         return Response.json({ error: 'Не удалось сохранить' }, { status: 500, headers: corsHeaders });
+      } finally {
+        closeClient(c);
       }
     }
 

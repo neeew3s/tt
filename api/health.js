@@ -1,4 +1,7 @@
-import { Redis } from '@upstash/redis';
+import { Redis as UpstashRedis } from '@upstash/redis';
+import IORedis from 'ioredis';
+
+const KEY = 'tt_state_v1';
 
 function describeUrl(raw) {
   if (!raw) return null;
@@ -7,6 +10,7 @@ function describeUrl(raw) {
     return {
       protocol: u.protocol,
       hostname: u.hostname,
+      port: u.port || null,
       hasUsername: !!u.username,
       username: u.username || null,
       hasPassword: !!u.password,
@@ -16,10 +20,33 @@ function describeUrl(raw) {
   }
 }
 
+function getClient() {
+  const restUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const restToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+  if (restUrl && restToken) {
+    return { client: new UpstashRedis({ url: restUrl, token: restToken }), kind: 'rest' };
+  }
+
+  const tcpUrl = process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL;
+  if (tcpUrl) {
+    return {
+      client: new IORedis(tcpUrl, {
+        lazyConnect: true,
+        maxRetriesPerRequest: 1,
+        connectTimeout: 8000,
+        retryStrategy: () => null,
+      }),
+      kind: 'tcp',
+    };
+  }
+
+  return null;
+}
+
 export default {
   async fetch() {
     const redisUrl = process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL || null;
-    const info = {
+    const result = {
       env: {
         UPSTASH_REDIS_REST_URL: !!process.env.UPSTASH_REDIS_REST_URL,
         UPSTASH_REDIS_REST_TOKEN: !!process.env.UPSTASH_REDIS_REST_TOKEN,
@@ -27,38 +54,46 @@ export default {
         REDIS_URL: !!process.env.REDIS_URL,
       },
       redisUrl: describeUrl(redisUrl),
+      redisConfigured: false,
+      writeReadTest: null,
+      storedState: null,
     };
 
-    // Быстрый сетевой тест через raw fetch с жёстким таймаутом 8с,
-    // чтобы не зависнуть. Показывает реальный ответ Upstash REST API.
-    const probe = { attempted: false, status: null, body: null, error: null };
-    if (redisUrl) {
-      const desc = describeUrl(redisUrl);
-      if (desc && (desc.protocol === 'redis:' || desc.protocol === 'rediss:')) {
-        const host = desc.hostname;
-        const token = (() => { try { const u = new URL(redisUrl); return u.password || ''; } catch (e) { return ''; } })();
-        probe.attempted = true;
-        probe.restUrl = 'https://' + host;
-        probe.tokenLen = token.length;
-        try {
-          const ctrl = new AbortController();
-          const t = setTimeout(() => ctrl.abort(), 8000);
-          const res = await fetch('https://' + host + '/ping', {
-            method: 'POST',
-            headers: { Authorization: 'Bearer ' + token },
-            signal: ctrl.signal,
-          });
-          clearTimeout(t);
-          probe.status = res.status;
-          const text = await res.text();
-          probe.body = text.slice(0, 200);
-        } catch (e) {
-          probe.error = (e && e.name ? e.name + ': ' : '') + (e && e.message ? e.message : String(e));
-        }
-      }
+    const c = getClient();
+    if (!c) {
+      return Response.json(result);
     }
-    info.probe = probe;
+    result.redisConfigured = true;
+    result.kind = c.kind;
 
-    return Response.json(info);
+    try {
+      await c.client.set('tt_health_probe', 'ok');
+      const val = await c.client.get('tt_health_probe');
+      await c.client.del('tt_health_probe');
+      result.writeReadTest = val === 'ok' ? 'ok' : 'unexpected';
+    } catch (e) {
+      result.writeReadTest = 'error: ' + (e && e.message ? e.message : String(e));
+    }
+
+    try {
+      const raw = await c.client.get(KEY);
+      if (raw) {
+        const data = JSON.parse(raw);
+        result.storedState = {
+          hasData: true,
+          workspaces: Array.isArray(data.workspaces) ? data.workspaces.length : 0,
+        };
+      } else {
+        result.storedState = { hasData: false };
+      }
+    } catch (e) {
+      result.storedState = { error: e && e.message ? e.message : String(e) };
+    }
+
+    if (c.kind === 'tcp') {
+      try { c.client.disconnect(); } catch (e) { /* ignore */ }
+    }
+
+    return Response.json(result);
   },
 };
