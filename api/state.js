@@ -5,7 +5,7 @@ const KEY = 'tt_state_v1';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, PUT, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, PUT, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
@@ -78,6 +78,21 @@ export default {
         return Response.json({ ok: true }, { headers: corsHeaders });
       } catch (err) {
         return Response.json({ error: 'Не удалось сохранить' }, { status: 500, headers: corsHeaders });
+      } finally {
+        closeClient(c);
+      }
+    }
+
+    if (method === 'DELETE') {
+      const c = getClient();
+      if (!c) {
+        return Response.json({ error: 'Хранилище не настроено' }, { status: 503, headers: corsHeaders });
+      }
+      try {
+        await c.client.del(KEY);
+        return Response.json({ ok: true }, { headers: corsHeaders });
+      } catch (err) {
+        return Response.json({ error: 'Не удалось удалить' }, { status: 500, headers: corsHeaders });
       } finally {
         closeClient(c);
       }
