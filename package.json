@@ -11,6 +11,6 @@
     "@vercel/kv": "^3.0.0"
   },
   "devDependencies": {
-    "vercel": "^41.0.0"
+    "vercel": "^63.1.0"
   }
 }
