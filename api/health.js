@@ -2,11 +2,39 @@ import { Redis } from '@upstash/redis';
 
 const KEY = 'tt_state_v1';
 
+// Разбирает одиночный URL в { url, token } для Upstash REST API.
+function parseUpstashUrl(raw) {
+  try {
+    const u = new URL(raw);
+    const proto = u.protocol;
+    if (proto === 'http:' || proto === 'https:') {
+      const url = u.origin;
+      const token = u.password || u.username || '';
+      return token ? { url, token } : { url };
+    }
+    if (proto === 'redis:' || proto === 'rediss:') {
+      const url = 'https://' + u.hostname;
+      const token = u.password || '';
+      return token ? { url, token } : { url };
+    }
+  } catch (e) {
+    // ignore
+  }
+  return {};
+}
+
 function getRedis() {
-  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
-  if (!url || !token) return null;
-  return new Redis({ url, token });
+  const restUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const restToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+  if (restUrl && restToken) return new Redis({ url: restUrl, token: restToken });
+
+  const raw = process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL;
+  if (raw) {
+    const { url, token } = parseUpstashUrl(raw);
+    if (url && token) return new Redis({ url, token });
+  }
+
+  return null;
 }
 
 export default {
@@ -16,6 +44,7 @@ export default {
         UPSTASH_REDIS_REST_URL: !!process.env.UPSTASH_REDIS_REST_URL,
         UPSTASH_REDIS_REST_TOKEN: !!process.env.UPSTASH_REDIS_REST_TOKEN,
         UPSTASH_REDIS_URL: !!process.env.UPSTASH_REDIS_URL,
+        REDIS_URL: !!process.env.REDIS_URL,
         KV_REST_API_URL: !!process.env.KV_REST_API_URL,
         KV_REST_API_TOKEN: !!process.env.KV_REST_API_TOKEN,
       },

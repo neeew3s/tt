@@ -43,7 +43,7 @@ npm run dev          # vercel dev — поднимает локальный се
 1. Зарегистрируйтесь на [vercel.com](https://vercel.com) и импортируйте репозиторий.
    - Framework preset можно оставить **Other** (Vercel сам определит статику + функции).
 2. Создайте базу **Upstash Redis**:
-   - **Вариант А (проще):** Dashboard → **Storage → Create → Redis → Upstash**. Vercel сам подставит переменные `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `UPSTASH_REDIS_URL`.
+   - **Вариант А (проще):** Dashboard → **Storage → Create → Redis → Upstash**. Vercel сам подставит переменные `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`, либо одиночный `REDIS_URL` — код поддерживает оба варианта.
    - **Вариант Б:** создайте бесплатную Redis-базу на [console.upstash.com](https://console.upstash.com) и добавьте в проект переменные окружения `UPSTASH_REDIS_REST_URL` и `UPSTASH_REDIS_REST_TOKEN` (вкладка **Settings → Environment Variables**).
 3. Задеплойте (Redeploy), чтобы подхватились переменные.
 

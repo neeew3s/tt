@@ -8,11 +8,42 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
+// Разбирает одиночный URL в { url, token } для Upstash REST API.
+// Поддерживает rediss://default:PASSWORD@HOST:6379 и https://[TOKEN@]HOST.
+function parseUpstashUrl(raw) {
+  try {
+    const u = new URL(raw);
+    const proto = u.protocol;
+    if (proto === 'http:' || proto === 'https:') {
+      const url = u.origin; // без userinfo и пути
+      const token = u.password || u.username || '';
+      return token ? { url, token } : { url };
+    }
+    if (proto === 'redis:' || proto === 'rediss:') {
+      const url = 'https://' + u.hostname;
+      const token = u.password || '';
+      return token ? { url, token } : { url };
+    }
+  } catch (e) {
+    // невалидный URL — игнорируем
+  }
+  return {};
+}
+
 function getRedis() {
-  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
-  if (!url || !token) return null;
-  return new Redis({ url, token });
+  // 1) Стандартные имена Upstash REST (Vercel Marketplace)
+  const restUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const restToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+  if (restUrl && restToken) return new Redis({ url: restUrl, token: restToken });
+
+  // 2) Одиночный URL (REDIS_URL / UPSTASH_REDIS_URL): rediss:// или https://
+  const raw = process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL;
+  if (raw) {
+    const { url, token } = parseUpstashUrl(raw);
+    if (url && token) return new Redis({ url, token });
+  }
+
+  return null;
 }
 
 export default {
