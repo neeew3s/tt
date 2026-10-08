@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Task Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #080a0c;
+      color: #e5e7eb;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Атмосферный темный фон зимнего леса из референса */
+    .bg-forest {
+      background-image: 
+        radial-gradient(circle at 50% 30%, rgba(8, 10, 12, 0.45) 0%, rgba(5, 7, 9, 0.88) 100%),
+        url('bg_final.jpg');
+      background-position: center center;
+      background-size: cover;
+      background-attachment: fixed;
+      background-repeat: no-repeat;
+    }
+
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.18);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.32);
+    }
+
+    .glass-pill {
+      background: rgba(20, 22, 26, 0.82);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .glass-card {
+      background: rgba(18, 20, 24, 0.78);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+      border-radius: 16px;
+      transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .glass-card:hover {
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+    }
+
+    /* Колонки без фона и без рамок */
+    .kanban-col {
+      background: transparent !important;
+      border: none !important;
+      box-shadow: none !important;
+      backdrop-filter: none !important;
+    }
+
+    .kanban-board {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .task-dropzone {
+      min-height: 480px;
+      transition: background-color 0.2s ease, border-color 0.2s ease;
+      border: 1px dashed transparent;
+      border-radius: 14px;
+    }
+
+    .task-dropzone.drag-over {
+      background: rgba(255, 255, 255, 0.04);
+      border-color: rgba(255, 255, 255, 0.22);
+    }
+
+    .task-dragging {
+      opacity: 0.35;
+      transform: scale(0.98);
+    }
+
+    @media (max-width: 767px) {
+      .kanban-board {
+        grid-template-columns: 1fr;
+      }
+
+      .task-dropzone {
+        flex-direction: row !important;
+        align-items: stretch;
+        overflow-x: auto;
+        min-height: 220px;
+        gap: 0.75rem;
+        scroll-snap-type: x proximity;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .task-dropzone > * {
+        flex: 0 0 auto;
+        min-width: 240px;
+        max-width: 240px;
+      }
+    }
+  </style>
+</head>
+<body class="bg-forest min-h-screen text-neutral-200 flex flex-col selection:bg-neutral-700 selection:text-white">
+
+  <!-- Лаконичная верхняя навигация -->
+  <header class="w-full px-6 py-5 md:px-12 flex items-center justify-between z-20">
+    <div id="header-left-slot" class="flex items-center gap-3">
+      <!-- На странице доски здесь отображается кнопка «← Все пространства» -->
+    </div>
+    <div id="header-right-slot" class="flex items-center gap-2">
+      <!-- Дополнительные контекстные действия -->
+    </div>
+  </header>
+
+  <main class="w-full max-w-6xl mx-auto px-4 sm:px-6 py-4 flex-1 flex flex-col justify-start md:justify-center">
+
+    <!-- ЭКРАН 1: Рабочие пространства -->
+    <section id="view-workspaces" class="flex flex-col items-center w-full max-w-2xl mx-auto py-6">
+      <!-- Кнопка-бейдж заголовка в стиле референса -->
+      <div class="mb-8">
+        <div class="glass-pill px-6 py-2 rounded-full text-xs font-semibold uppercase tracking-[0.25em] text-neutral-300">
+          РАБОЧИЕ ОБЛАСТИ
+        </div>
+      </div>
+
+      <!-- Сетка рабочих пространств -->
+      <div id="workspaces-grid" class="w-full grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+        <!-- Заполняется JavaScript -->
+      </div>
+
+      <!-- Кнопка создания нового пространства -->
+      <button id="btn-show-create-ws" class="glass-pill px-6 py-2.5 rounded-full flex items-center gap-2.5 text-xs text-neutral-300 hover:text-white hover:border-white/20 active:scale-95 group">
+        <svg class="w-4 h-4 text-neutral-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+        </svg>
+        <span>Создать рабочую область</span>
+      </button>
+    </section>
+
+    <!-- ЭКРАН 2: Канбан-доска (прозрачные колонки) -->
+    <section id="view-kanban" class="w-full hidden flex-col py-2">
+      <!-- Шапка доски с заголовком и кнопкой создания задачи -->
+      <div class="flex items-center justify-between mb-8 pb-3 border-b border-white/5">
+        <div class="flex items-center gap-3">
+          <h1 id="kanban-title" class="text-lg sm:text-xl font-bold tracking-wider uppercase text-white"></h1>
+          <span id="kanban-total-count" class="text-xs px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-neutral-400">0 задач</span>
+        </div>
+        <button id="btn-open-create-task-main" class="glass-pill px-4 py-2 rounded-full flex items-center gap-2 text-xs font-medium text-neutral-200 hover:text-white hover:border-white/25 active:scale-95">
+          <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+          </svg>
+          <span>Новая задача</span>
+        </button>
+      </div>
+
+      <!-- 3 Колонки без фона и рамок -->
+      <div class="kanban-board gap-6 sm:gap-8 items-start">
+        
+        <!-- Колонка 1: Сделать -->
+        <div class="kanban-col flex flex-col" data-status="todo">
+          <div class="flex items-center justify-between pb-3 mb-2 border-b border-white/10">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+              <span class="text-xs font-semibold uppercase tracking-wider text-neutral-300">Сделать</span>
+            </div>
+            <span class="col-count text-[11px] px-2 py-0.5 rounded-full bg-white/5 text-neutral-400">0</span>
+          </div>
+          <div class="task-dropzone flex flex-col gap-3 p-1.5" id="zone-todo">
+            <!-- Карточки задач со своим фоном -->
+          </div>
+        </div>
+
+        <!-- Колонка 2: В работе -->
+        <div class="kanban-col flex flex-col" data-status="in-progress">
+          <div class="flex items-center justify-between pb-3 mb-2 border-b border-white/10">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+              <span class="text-xs font-semibold uppercase tracking-wider text-neutral-300">В работе</span>
+            </div>
+            <span class="col-count text-[11px] px-2 py-0.5 rounded-full bg-white/5 text-neutral-400">0</span>
+          </div>
+          <div class="task-dropzone flex flex-col gap-3 p-1.5" id="zone-in-progress">
+            <!-- Карточки задач со своим фоном -->
+          </div>
+        </div>
+
+        <!-- Колонка 3: Сделано -->
+        <div class="kanban-col flex flex-col" data-status="done">
+          <div class="flex items-center justify-between pb-3 mb-2 border-b border-white/10">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span class="text-xs font-semibold uppercase tracking-wider text-neutral-300">Сделано</span>
+            </div>
+            <span class="col-count text-[11px] px-2 py-0.5 rounded-full bg-white/5 text-neutral-400">0</span>
+          </div>
+          <div class="task-dropzone flex flex-col gap-3 p-1.5" id="zone-done">
+            <!-- Карточки задач со своим фоном -->
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- МОДАЛЬНОЕ ОКНО: Создание рабочего пространства -->
+  <div id="modal-ws" class="fixed inset-0 bg-black/75 backdrop-blur-md hidden items-center justify-center p-4 z-50">
+    <div class="glass-card w-full max-w-md p-6 relative">
+      <h3 class="text-sm font-semibold uppercase tracking-wider text-neutral-200 mb-4">Новая рабочая область</h3>
+      
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs text-neutral-400 mb-1.5">Название</label>
+          <input type="text" id="ws-input-title" class="w-full bg-neutral-900/90 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-neutral-200 focus:outline-none focus:border-white/30" />
+        </div>
+        <div>
+          <label class="block text-xs text-neutral-400 mb-1.5">Подзаголовок / описание</label>
+          <input type="text" id="ws-input-subtitle" class="w-full bg-neutral-900/90 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-neutral-200 focus:outline-none focus:border-white/30" />
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-3 mt-6">
+        <button id="ws-btn-cancel" class="glass-pill px-4 py-2 rounded-full text-xs text-neutral-400 hover:text-white">Отмена</button>
+        <button id="ws-btn-save" class="glass-pill px-5 py-2 rounded-full text-xs font-medium text-white border border-white/20 bg-white/10 hover:bg-white/20">Создать</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО: Создание задачи -->
+  <div id="modal-task-create" class="fixed inset-0 bg-black/75 backdrop-blur-md hidden items-center justify-center p-4 z-50">
+    <div class="glass-card w-full max-w-md p-6 relative">
+      <h3 id="task-modal-title" class="text-sm font-semibold uppercase tracking-wider text-neutral-200 mb-4">Создать задачу</h3>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs text-neutral-400 mb-1.5">Название задачи *</label>
+          <input type="text" id="task-input-title" class="w-full bg-neutral-900/90 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-neutral-200 focus:outline-none focus:border-white/30" />
+        </div>
+        <div>
+          <label class="block text-xs text-neutral-400 mb-1.5">Описание</label>
+          <textarea id="task-input-desc" rows="3" class="w-full bg-neutral-900/90 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-neutral-200 focus:outline-none focus:border-white/30 resize-none"></textarea>
+        </div>
+        <div>
+          <label class="block text-xs text-neutral-400 mb-1.5">Статус</label>
+          <select id="task-input-status" class="w-full bg-neutral-900/90 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-neutral-200 focus:outline-none focus:border-white/30">
+            <option value="todo">Сделать</option>
+            <option value="in-progress">В работе</option>
+            <option value="done">Сделано</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-3 mt-6">
+        <button id="task-btn-cancel" class="glass-pill px-4 py-2 rounded-full text-xs text-neutral-400 hover:text-white">Отмена</button>
+        <button id="task-btn-save" class="glass-pill px-5 py-2 rounded-full text-xs font-medium text-white border border-white/20 bg-white/10 hover:bg-white/20">Добавить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- МОДАЛЬНОЕ ОКНО: Просмотр и удаление задачи (без комментариев и кнопок перемещения) -->
+  <div id="modal-task-view" class="fixed inset-0 bg-black/75 backdrop-blur-md hidden items-center justify-center p-4 z-50">
+    <div class="glass-card w-full max-w-lg p-6 relative flex flex-col">
+      <div class="flex items-start justify-between gap-4 mb-4 pb-3 border-b border-white/10">
+        <div>
+          <span id="view-task-badge" class="inline-block text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full mb-1.5 bg-white/5 text-neutral-300 border border-white/10"></span>
+          <h2 id="view-task-title" class="text-base sm:text-lg font-semibold text-white leading-snug"></h2>
+        </div>
+        <button id="view-task-close-icon" class="text-neutral-400 hover:text-white p-1 rounded-full">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <div class="mb-6 flex-1">
+        <h4 class="text-xs uppercase font-medium tracking-wider text-neutral-400 mb-2">Описание</h4>
+        <div id="view-task-desc" class="text-xs sm:text-sm text-neutral-300 bg-black/30 p-3.5 rounded-xl border border-white/5 whitespace-pre-wrap leading-relaxed min-h-[80px]"></div>
+      </div>
+
+      <div class="flex items-center justify-between pt-4 border-t border-white/10">
+        <button id="view-task-delete-btn" class="text-xs text-red-400 hover:text-red-300 flex items-center gap-1.5 transition-colors px-2 py-1 rounded">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+          Удалить задачу
+        </button>
+        <div class="flex items-center gap-2">
+          <button id="view-task-edit-btn" class="glass-pill px-5 py-1.5 rounded-full text-xs text-neutral-300 hover:text-white">Редактировать</button>
+          <button id="view-task-close-btn" class="glass-pill px-5 py-1.5 rounded-full text-xs text-neutral-300 hover:text-white">Закрыть</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast уведомления -->
+  <div id="toast-wrapper" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-300 opacity-0 translate-y-3">
+    <div id="toast-text" class="glass-pill px-5 py-2 rounded-full text-xs text-neutral-200 border border-white/20 shadow-2xl">
+      Уведомление
+    </div>
+  </div>
+
+  <script>
+    const INITIAL_STATE = {
+      activeWorkspaceId: 'ws-work',
+      workspaces: [
+        {
+          id: 'ws-work',
+          title: 'Работа',
+          subtitle: 'Проекты, встречи и релизы',
+          icon: 'briefcase',
+          tasks: [
+            { id: 't-1', title: 'Подготовить отчет за квартал', description: 'Собрать аналитику по показателям команды и отправить руководству.', status: 'todo' },
+            { id: 't-2', title: 'Рефакторинг API модуля', description: 'Устранить избыточные вызовы и обновить типизацию.', status: 'in-progress' },
+            { id: 't-3', title: 'Согласовать дизайн новой фичи', description: 'Макеты переданы в разработку.', status: 'done' }
+          ]
+        },
+        {
+          id: 'ws-study',
+          title: 'Учеба',
+          subtitle: 'Курсы, литература и практика',
+          icon: 'book',
+          tasks: [
+            { id: 't-4', title: 'Изучить системный дизайн', description: 'Главы 4-6 книги Designing Data-Intensive Applications.', status: 'todo' },
+            { id: 't-5', title: 'Практика алгоритмов', description: 'Решить 3 задачи на графы.', status: 'in-progress' }
+          ]
+        }
+      ]
+    };
+
+    let appState = {
+      workspaces: [],
+      currentWsId: null,
+      selectedTaskId: null,
+      draggedTaskId: null,
+      editingTaskId: null
+    };
+
+    const LOCAL_KEY = 'task_tracker_minimal_data';
+    const REMOTE_ENDPOINT = '/api/state';
+
+    let remoteAvailable = false;
+    let syncTimer = null;
+    let syncWarningShown = false;
+
+    function localSave() {
+      try {
+        localStorage.setItem(LOCAL_KEY, JSON.stringify({
+          workspaces: appState.workspaces,
+          currentWsId: appState.currentWsId
+        }));
+      } catch (e) {
+        console.error('Ошибка записи localStorage:', e);
+      }
+    }
+
+    async function fetchRemoteState() {
+      const res = await fetch(REMOTE_ENDPOINT, { cache: 'no-store' });
+      if (!res.ok) throw new Error('remote not ok');
+      return await res.json();
+    }
+
+    async function pushRemoteState() {
+      const res = await fetch(REMOTE_ENDPOINT, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspaces: appState.workspaces, currentWsId: appState.currentWsId })
+      });
+      if (!res.ok) throw new Error('remote push failed');
+    }
+
+    // Порядок загрузки: облако (источник истины) → localStorage → демо-данные
+    async function loadState() {
+      try {
+        const data = await fetchRemoteState();
+        if (data && Array.isArray(data.workspaces) && data.workspaces.length) {
+          appState.workspaces = data.workspaces;
+          appState.currentWsId = data.currentWsId || appState.workspaces[0]?.id;
+          remoteAvailable = true;
+          localSave();
+          return;
+        }
+        remoteAvailable = true; // сервер доступен, но данных ещё нет
+      } catch (e) {
+        remoteAvailable = false;
+      }
+
+      let usedLocal = false;
+      try {
+        const saved = localStorage.getItem(LOCAL_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.workspaces && parsed.workspaces.length) {
+            appState.workspaces = parsed.workspaces;
+            appState.currentWsId = parsed.currentWsId || appState.workspaces[0]?.id;
+            usedLocal = true;
+          }
+        }
+      } catch (e) {
+        console.error('Ошибка чтения localStorage:', e);
+      }
+
+      if (!usedLocal) {
+        appState.workspaces = JSON.parse(JSON.stringify(INITIAL_STATE.workspaces));
+        appState.currentWsId = INITIAL_STATE.activeWorkspaceId;
+      }
+
+      // Сервер пуст, но у нас есть локальные/демо данные — зальём их в облако,
+      // чтобы другие устройства подхватили их сразу.
+      if (remoteAvailable && appState.workspaces.length) {
+        localSave();
+        scheduleRemoteSync();
+      }
+    }
+
+    function saveToStorage() {
+      localSave();
+      scheduleRemoteSync();
+    }
+
+    function scheduleRemoteSync() {
+      if (syncTimer) clearTimeout(syncTimer);
+      syncTimer = setTimeout(async () => {
+        syncTimer = null;
+        try {
+          await pushRemoteState();
+          remoteAvailable = true;
+        } catch (e) {
+          if (!syncWarningShown) {
+            syncWarningShown = true;
+            showToast('Нет связи с сервером — сохранено локально');
+            setTimeout(() => { syncWarningShown = false; }, 8000);
+          }
+        }
+      }, 400);
+    }
+
+    function showToast(msg) {
+      const wrapper = document.getElementById('toast-wrapper');
+      const text = document.getElementById('toast-text');
+      text.innerText = msg;
+      wrapper.classList.remove('opacity-0', 'translate-y-3', 'pointer-events-none');
+      wrapper.classList.add('opacity-100', 'translate-y-0');
+
+      setTimeout(() => {
+        wrapper.classList.add('opacity-0', 'translate-y-3', 'pointer-events-none');
+        wrapper.classList.remove('opacity-100', 'translate-y-0');
+      }, 2300);
+    }
+
+    function getIconSvg(type) {
+      switch (type) {
+        case 'book':
+          return `<svg class="w-5 h-5 text-neutral-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>`;
+        case 'code':
+          return `<svg class="w-5 h-5 text-neutral-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>`;
+        case 'star':
+          return `<svg class="w-5 h-5 text-neutral-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"></path></svg>`;
+        case 'briefcase':
+        default:
+          return `<svg class="w-5 h-5 text-neutral-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>`;
+      }
+    }
+
+    function renderHeader(isKanbanView) {
+      const leftSlot = document.getElementById('header-left-slot');
+      const rightSlot = document.getElementById('header-right-slot');
+      leftSlot.innerHTML = '';
+      rightSlot.innerHTML = '';
+
+      if (isKanbanView) {
+        // Кнопка возврата ко всем пространствам
+        const backBtn = document.createElement('button');
+        backBtn.className = 'glass-pill px-4 py-2 rounded-full flex items-center gap-2 text-xs text-neutral-300 hover:text-white hover:border-white/20 active:scale-95';
+        backBtn.innerHTML = `
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+          <span>Все пространства</span>
+        `;
+        backBtn.onclick = showWorkspacesScreen;
+        leftSlot.appendChild(backBtn);
+
+        // Кнопка удаления текущего пространства
+        const delWsBtn = document.createElement('button');
+        delWsBtn.className = 'glass-pill px-3 py-2 rounded-full text-xs text-red-400 hover:text-red-300 hover:border-red-400/30 transition-all';
+        delWsBtn.title = 'Удалить эту рабочую область';
+        delWsBtn.innerHTML = `
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+        `;
+        delWsBtn.onclick = deleteCurrentWorkspace;
+        rightSlot.appendChild(delWsBtn);
+      }
+    }
+
+    function renderWorkspacesScreen() {
+      renderHeader(false);
+      const grid = document.getElementById('workspaces-grid');
+      grid.innerHTML = '';
+
+      appState.workspaces.forEach(ws => {
+        const count = ws.tasks ? ws.tasks.length : 0;
+        const card = document.createElement('div');
+        card.className = 'glass-card p-5 cursor-pointer flex items-center justify-between group transition-all select-none relative';
+
+        card.innerHTML = `
+          <div class="flex items-center gap-4">
+            <div class="w-11 h-11 rounded-xl bg-white/[0.04] border border-white/10 flex items-center justify-center text-neutral-200 group-hover:scale-105 group-hover:bg-white/[0.08] transition-all">
+              ${getIconSvg(ws.icon)}
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="text-xs sm:text-sm font-semibold tracking-wider uppercase text-neutral-200 group-hover:text-white transition-colors">
+                  ${escapeHtml(ws.title)}
+                </h3>
+                <span class="text-neutral-500 text-xs font-mono group-hover:text-neutral-300 transition-colors">&gt;</span>
+              </div>
+              <p class="text-[11px] sm:text-xs text-neutral-400 mt-0.5 line-clamp-1">
+                ${escapeHtml(ws.subtitle || 'Рабочая область')}
+              </p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 pl-2">
+            <span class="text-[11px] font-medium px-2 py-0.5 rounded-full bg-black/40 text-neutral-400 border border-white/5">
+              ${count}
+            </span>
+          </div>
+        `;
+
+        card.onclick = () => openWorkspace(ws.id);
+        grid.appendChild(card);
+      });
+    }
+
+    function renderKanbanScreen() {
+      const currentWs = appState.workspaces.find(w => w.id === appState.currentWsId);
+      if (!currentWs) {
+        showWorkspacesScreen();
+        return;
+      }
+
+      renderHeader(true);
+
+      document.getElementById('kanban-title').innerText = currentWs.title;
+      const tasks = currentWs.tasks || [];
+      document.getElementById('kanban-total-count').innerText = `${tasks.length} ${getNoun(tasks.length, 'задача', 'задачи', 'задач')}`;
+
+      const zoneTodo = document.getElementById('zone-todo');
+      const zoneInProgress = document.getElementById('zone-in-progress');
+      const zoneDone = document.getElementById('zone-done');
+
+      zoneTodo.innerHTML = '';
+      zoneInProgress.innerHTML = '';
+      zoneDone.innerHTML = '';
+
+      const todoTasks = tasks.filter(t => t.status === 'todo');
+      const inProgressTasks = tasks.filter(t => t.status === 'in-progress');
+      const doneTasks = tasks.filter(t => t.status === 'done');
+
+      document.querySelector('[data-status="todo"] .col-count').innerText = todoTasks.length;
+      document.querySelector('[data-status="in-progress"] .col-count').innerText = inProgressTasks.length;
+      document.querySelector('[data-status="done"] .col-count').innerText = doneTasks.length;
+
+      todoTasks.forEach(task => zoneTodo.appendChild(renderTaskCard(task)));
+      inProgressTasks.forEach(task => zoneInProgress.appendChild(renderTaskCard(task)));
+      doneTasks.forEach(task => zoneDone.appendChild(renderTaskCard(task)));
+
+      // Аккуратная пустая заглушка если нет задач
+      [
+        { zone: zoneTodo, text: 'Нет задач' },
+        { zone: zoneInProgress, text: 'Нет задач в работе' },
+        { zone: zoneDone, text: 'Нет завершенных задач' }
+      ].forEach(({ zone, text }) => {
+        if (zone.children.length === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'h-24 flex items-center justify-center text-[11px] text-neutral-500 border border-dashed border-white/5 rounded-xl';
+          empty.innerText = text;
+          zone.appendChild(empty);
+        }
+      });
+    }
+
+    function renderTaskCard(task) {
+      const card = document.createElement('div');
+      // Фон, блюр и границы только на самих карточках задач
+      card.className = 'glass-card p-4 cursor-grab active:cursor-grabbing select-none relative group';
+      card.setAttribute('draggable', 'true');
+      card.setAttribute('data-id', task.id);
+
+      card.innerHTML = `
+        <div class="flex items-start justify-between gap-2 mb-1.5">
+          <h4 class="text-xs sm:text-sm font-semibold text-neutral-100 group-hover:text-white leading-snug">
+            ${escapeHtml(task.title)}
+          </h4>
+          <button class="btn-quick-del text-neutral-500 hover:text-red-400 p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity" title="Удалить">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+        ${task.description ? `<p class="text-[11px] text-neutral-400 line-clamp-2 leading-relaxed">${escapeHtml(task.description)}</p>` : ''}
+      `;
+
+      card.onclick = (e) => {
+        if (e.target.closest('.btn-quick-del')) {
+          e.stopPropagation();
+          deleteTask(task.id);
+          return;
+        }
+        openTaskViewModal(task.id);
+      };
+
+      card.ondragstart = (e) => {
+        appState.draggedTaskId = task.id;
+        card.classList.add('task-dragging');
+        e.dataTransfer.setData('text/plain', task.id);
+      };
+
+      card.ondragend = () => {
+        card.classList.remove('task-dragging');
+        appState.draggedTaskId = null;
+      };
+
+      return card;
+    }
+
+    function setupDragDrop() {
+      const zones = document.querySelectorAll('.task-dropzone');
+
+      zones.forEach(zone => {
+        zone.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          zone.classList.add('drag-over');
+        });
+
+        zone.addEventListener('dragleave', (e) => {
+          if (!zone.contains(e.relatedTarget)) {
+            zone.classList.remove('drag-over');
+          }
+        });
+
+        zone.addEventListener('drop', (e) => {
+          e.preventDefault();
+          zone.classList.remove('drag-over');
+
+          const col = zone.closest('.kanban-col');
+          const targetStatus = col ? col.getAttribute('data-status') : null;
+          const taskId = e.dataTransfer.getData('text/plain') || appState.draggedTaskId;
+
+          if (taskId && targetStatus) {
+            moveTask(taskId, targetStatus);
+          }
+        });
+      });
+    }
+
+    function moveTask(taskId, targetStatus) {
+      const ws = appState.workspaces.find(w => w.id === appState.currentWsId);
+      if (!ws) return;
+
+      const task = ws.tasks.find(t => t.id === taskId);
+      if (task && task.status !== targetStatus) {
+        task.status = targetStatus;
+        saveToStorage();
+        renderKanbanScreen();
+        showToast(`Задача перенесена в «${getStatusLabel(targetStatus)}»`);
+      }
+    }
+
+    function getStatusLabel(s) {
+      switch (s) {
+        case 'todo': return 'Сделать';
+        case 'in-progress': return 'В работе';
+        case 'done': return 'Сделано';
+        default: return '';
+      }
+    }
+
+    function openWorkspace(id) {
+      appState.currentWsId = id;
+      saveToStorage();
+      document.getElementById('view-workspaces').classList.add('hidden');
+      document.getElementById('view-kanban').classList.remove('hidden');
+      document.getElementById('view-kanban').classList.add('flex');
+      renderKanbanScreen();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function showWorkspacesScreen() {
+      document.getElementById('view-kanban').classList.add('hidden');
+      document.getElementById('view-kanban').classList.remove('flex');
+      document.getElementById('view-workspaces').classList.remove('hidden');
+      renderWorkspacesScreen();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function deleteCurrentWorkspace() {
+      appState.workspaces = appState.workspaces.filter(w => w.id !== appState.currentWsId);
+      appState.currentWsId = appState.workspaces[0]?.id ?? null;
+      saveToStorage();
+      showWorkspacesScreen();
+      showToast('Рабочая область удалена');
+    }
+
+    function createTask(title, desc, status) {
+      const ws = appState.workspaces.find(w => w.id === appState.currentWsId);
+      if (!ws || !title.trim()) return;
+
+      ws.tasks.push({
+        id: 't-' + Date.now(),
+        title: title.trim(),
+        description: desc.trim(),
+        status: status || 'todo'
+      });
+
+      saveToStorage();
+      renderKanbanScreen();
+      showToast('Задача добавлена');
+    }
+
+    function updateTask(taskId, title, desc, status) {
+      const ws = appState.workspaces.find(w => w.id === appState.currentWsId);
+      if (!ws) return;
+      const task = ws.tasks.find(t => t.id === taskId);
+      if (!task) return;
+
+      task.title = title.trim();
+      task.description = desc.trim();
+      task.status = status || task.status;
+
+      saveToStorage();
+      renderKanbanScreen();
+      showToast('Задача обновлена');
+    }
+
+    function openTaskCreateModal() {
+      appState.editingTaskId = null;
+      document.getElementById('task-modal-title').innerText = 'Создать задачу';
+      document.getElementById('task-btn-save').innerText = 'Добавить';
+      document.getElementById('task-input-title').value = '';
+      document.getElementById('task-input-desc').value = '';
+      document.getElementById('task-input-status').value = 'todo';
+
+      const modal = document.getElementById('modal-task-create');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      document.getElementById('task-input-title').focus();
+    }
+
+    function openTaskEditModal(taskId) {
+      const ws = appState.workspaces.find(w => w.id === appState.currentWsId);
+      if (!ws) return;
+      const task = ws.tasks.find(t => t.id === taskId);
+      if (!task) return;
+
+      appState.editingTaskId = taskId;
+      document.getElementById('task-modal-title').innerText = 'Редактировать задачу';
+      document.getElementById('task-btn-save').innerText = 'Сохранить';
+      document.getElementById('task-input-title').value = task.title;
+      document.getElementById('task-input-desc').value = task.description || '';
+      document.getElementById('task-input-status').value = task.status || 'todo';
+
+      closeTaskViewModal();
+
+      const modal = document.getElementById('modal-task-create');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      document.getElementById('task-input-title').focus();
+    }
+
+    function closeTaskFormModal() {
+      const modal = document.getElementById('modal-task-create');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+      appState.editingTaskId = null;
+    }
+
+    function handleTaskFormSave() {
+      const title = document.getElementById('task-input-title').value.trim();
+      const desc = document.getElementById('task-input-desc').value.trim();
+      const status = document.getElementById('task-input-status').value;
+
+      if (!title) {
+        showToast('Введите название задачи');
+        return;
+      }
+
+      if (appState.editingTaskId) {
+        updateTask(appState.editingTaskId, title, desc, status);
+      } else {
+        createTask(title, desc, status);
+      }
+
+      closeTaskFormModal();
+    }
+
+    function deleteTask(taskId) {
+      const ws = appState.workspaces.find(w => w.id === appState.currentWsId);
+      if (!ws) return;
+
+      ws.tasks = ws.tasks.filter(t => t.id !== taskId);
+      saveToStorage();
+      renderKanbanScreen();
+      showToast('Задача удалена');
+
+      if (appState.selectedTaskId === taskId) {
+        closeTaskViewModal();
+      }
+    }
+
+    function openTaskViewModal(taskId) {
+      const ws = appState.workspaces.find(w => w.id === appState.currentWsId);
+      if (!ws) return;
+
+      const task = ws.tasks.find(t => t.id === taskId);
+      if (!task) return;
+
+      appState.selectedTaskId = taskId;
+      document.getElementById('view-task-badge').innerText = getStatusLabel(task.status);
+      document.getElementById('view-task-title').innerText = task.title;
+      document.getElementById('view-task-desc').innerText = task.description || 'Описание отсутствует.';
+
+      const modal = document.getElementById('modal-task-view');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeTaskViewModal() {
+      const modal = document.getElementById('modal-task-view');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+      appState.selectedTaskId = null;
+    }
+
+    function getNoun(number, one, two, five) {
+      let n = Math.abs(number);
+      n %= 100;
+      if (n >= 5 && n <= 20) return five;
+      n %= 10;
+      if (n === 1) return one;
+      if (n >= 2 && n <= 4) return two;
+      return five;
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.innerText = text;
+      return div.innerHTML;
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      await loadState();
+      renderWorkspacesScreen();
+      setupDragDrop();
+
+      // Модалка создания рабочей области
+      const modalWs = document.getElementById('modal-ws');
+      document.getElementById('btn-show-create-ws').onclick = () => {
+        document.getElementById('ws-input-title').value = '';
+        document.getElementById('ws-input-subtitle').value = '';
+        modalWs.classList.remove('hidden');
+        modalWs.classList.add('flex');
+        document.getElementById('ws-input-title').focus();
+      };
+
+      document.getElementById('ws-btn-cancel').onclick = () => {
+        modalWs.classList.add('hidden');
+        modalWs.classList.remove('flex');
+      };
+
+      document.getElementById('ws-btn-save').onclick = () => {
+        const title = document.getElementById('ws-input-title').value.trim();
+        const subtitle = document.getElementById('ws-input-subtitle').value.trim();
+        if (!title) {
+          showToast('Введите название области');
+          return;
+        }
+
+        appState.workspaces.push({
+          id: 'ws-' + Date.now(),
+          title: title,
+          subtitle: subtitle || 'Рабочая область',
+          icon: 'briefcase',
+          tasks: []
+        });
+
+        saveToStorage();
+        renderWorkspacesScreen();
+        modalWs.classList.add('hidden');
+        modalWs.classList.remove('flex');
+        showToast('Рабочая область создана');
+      };
+
+      // Модалка создания задачи
+      const modalTaskCreate = document.getElementById('modal-task-create');
+      document.getElementById('btn-open-create-task-main').onclick = openTaskCreateModal;
+
+      document.getElementById('task-btn-cancel').onclick = closeTaskFormModal;
+
+      document.getElementById('task-btn-save').onclick = handleTaskFormSave;
+
+      // Модалка просмотра задачи
+      document.getElementById('view-task-close-btn').onclick = closeTaskViewModal;
+      document.getElementById('view-task-close-icon').onclick = closeTaskViewModal;
+
+      document.getElementById('view-task-edit-btn').onclick = () => {
+        if (appState.selectedTaskId) {
+          openTaskEditModal(appState.selectedTaskId);
+        }
+      };
+
+      document.getElementById('view-task-delete-btn').onclick = () => {
+        if (appState.selectedTaskId) {
+          deleteTask(appState.selectedTaskId);
+        }
+      };
+
+      // Закрытие по клику вне модалок
+      [modalWs, modalTaskCreate, document.getElementById('modal-task-view')].forEach(m => {
+        m.addEventListener('click', (e) => {
+          if (e.target === m) {
+            m.classList.add('hidden');
+            m.classList.remove('flex');
+            appState.selectedTaskId = null;
+            appState.editingTaskId = null;
+          }
+        });
+      });
+    });
+  </script>
+</body>
+</html>

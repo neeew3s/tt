@@ -1,0 +1,16 @@
+{
+  "name": "tt",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Task tracker (Kanban) with cross-device sync via Vercel KV",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "@vercel/kv": "^3.0.0"
+  },
+  "devDependencies": {
+    "vercel": "^41.0.0"
+  }
+}
